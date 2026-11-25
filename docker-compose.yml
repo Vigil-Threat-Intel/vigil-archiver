@@ -1,0 +1,11 @@
+services:
+  archiver:
+    build: .
+    restart: unless-stopped
+    environment:
+      VIGIL_STREAM_URL: ${VIGIL_STREAM_URL:-http://host.docker.internal:8000/stream}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/data
