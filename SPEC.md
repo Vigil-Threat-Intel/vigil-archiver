@@ -18,7 +18,7 @@ Vigil stores nothing by design. This service owns the storage.
 | Deduplication | None. Every alert is stored as received. |
 | Retention | Zips older than `RETENTION_DAYS` are deleted (default 30) |
 | Reconnection | Fixed 5 s delay |
-| Health check | None. Observability through stdout logs. |
+| Health check | None. Observability through stdout logs and a Prometheus `/metrics` endpoint (port `METRICS_PORT`, default 9108). The metric list is in the README. |
 | Deployment | Separate docker compose, targets Vigil by URL |
 
 ## Input
@@ -67,6 +67,7 @@ Reference implementation: the former Vigil archiver (`src/output/archiver.py`, r
 | `VIGIL_STREAM_URL` | `--url` | `http://host.docker.internal:8000/stream` | Vigil endpoint |
 | `ARCHIVE_DIR` | `--archive-dir` | `/data/archive` | Archive root |
 | `RETENTION_DAYS` | `--retention-days` | `30` | Days of zips kept |
+| `METRICS_PORT` | `--metrics-port` | `9108` | Prometheus `/metrics` port, `0` disables it |
 | none | `--verbose` | off | DEBUG logs |
 
 The CLI option wins over the environment variable.
@@ -83,7 +84,7 @@ Stdout only, standard `logging` format.
 ## Deployment
 
 - Image: `python:3.12-slim`, non-root user (UID 10001), `PYTHONUNBUFFERED=1`.
-- Dependency: `aiohttp` (async HTTP client with a read timeout).
+- Dependencies: `aiohttp` (async HTTP client with a read timeout, also serves `/metrics`), `prometheus_client`.
 - Separate `docker-compose.yml`:
   - `restart: unless-stopped`, because every minute offline is lost data.
   - `extra_hosts: ["host.docker.internal:host-gateway"]` to reach the port Vigil publishes on the host.
@@ -92,7 +93,7 @@ Stdout only, standard `logging` format.
 
 ## Out of scope
 
-Search or query API, notifications, enrichment, deduplication, replay without loss (`Last-Event-ID`), authentication, metrics endpoint, health check.
+Search or query API, notifications, enrichment, deduplication, replay without loss (`Last-Event-ID`), authentication, health check.
 
 ## Acceptance checks
 

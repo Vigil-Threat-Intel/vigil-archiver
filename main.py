@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 
+from src import metrics
 from src.client import DEFAULT_URL, StreamClient
 from src.store import AlertStore
 
@@ -27,9 +28,16 @@ async def run(args: argparse.Namespace) -> None:
         try:
             await store.write(alert)
         except ValueError as exc:
+            metrics.INVALID_ALERTS.inc()
             logger.warning("Invalid alert skipped (%s): %.200s", exc, alert)
         except OSError:
+            metrics.WRITE_ERRORS.inc()
             logger.exception("Write failed")
+
+    runner = None
+    if args.metrics_port:
+        metrics.watch_archive(args.archive_dir)
+        runner = await metrics.start_server("0.0.0.0", args.metrics_port)
 
     client = StreamClient(args.url, handle)
     tasks = [
@@ -43,6 +51,8 @@ async def run(args: argparse.Namespace) -> None:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        if runner is not None:
+            await runner.cleanup()
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,6 +72,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=int(os.environ.get("RETENTION_DAYS", "30")),
         help="days of zipped archives to keep (env RETENTION_DAYS)",
+    )
+    parser.add_argument(
+        "--metrics-port",
+        type=int,
+        default=int(os.environ.get("METRICS_PORT", str(metrics.DEFAULT_PORT))),
+        help="port of the Prometheus /metrics endpoint, 0 to disable (env METRICS_PORT)",
     )
     parser.add_argument("--verbose", action="store_true", help="enable DEBUG logs")
     return parser.parse_args()

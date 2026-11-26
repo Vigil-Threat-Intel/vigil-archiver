@@ -17,5 +17,6 @@ RUN useradd --system --uid 10001 archiver \
 
 USER archiver
 VOLUME /data
+EXPOSE 9108
 
 ENTRYPOINT ["python", "main.py"]

@@ -6,6 +6,8 @@ from typing import Awaitable, Callable
 
 import aiohttp
 
+from src import metrics
+
 logger = logging.getLogger("archiver.client")
 
 DEFAULT_URL = "http://host.docker.internal:8000/stream"
@@ -34,8 +36,10 @@ class StreamClient:
             while True:
                 try:
                     await self._consume(session)
+                    metrics.STREAM_DISCONNECTS.labels("closed").inc()
                     logger.info("Stream closed by server, retrying in %ss", self._reconnect_delay)
                 except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
+                    metrics.STREAM_DISCONNECTS.labels(self.disconnect_reason(exc)).inc()
                     logger.warning(
                         "Connection lost (%s: %s), retrying in %ss",
                         type(exc).__name__,
@@ -48,10 +52,23 @@ class StreamClient:
         async with session.get(self._url) as response:
             response.raise_for_status()
             logger.info("Connected to %s", self._url)
-            async for raw in response.content:
-                payload = self.parse_line(raw)
-                if payload is not None:
-                    await self._on_alert(payload)
+            metrics.STREAM_CONNECTED.set(1)
+            try:
+                async for raw in response.content:
+                    payload = self.parse_line(raw)
+                    if payload is not None:
+                        await self._on_alert(payload)
+            finally:
+                metrics.STREAM_CONNECTED.set(0)
+
+    @staticmethod
+    def disconnect_reason(exc: BaseException) -> str:
+        """Map a connection error to a bounded ``reason`` label."""
+        if isinstance(exc, asyncio.TimeoutError):
+            return "timeout"
+        if isinstance(exc, aiohttp.ClientResponseError):
+            return "http_error"
+        return "connection_error"
 
     @staticmethod
     def parse_line(raw: bytes) -> str | None:

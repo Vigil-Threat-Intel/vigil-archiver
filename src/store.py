@@ -9,6 +9,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
+from src import metrics
+
 logger = logging.getLogger("archiver.store")
 
 
@@ -51,6 +53,8 @@ class AlertStore:
         async with self._lock:
             await asyncio.to_thread(self._append, alert, moment)
         self.written += 1
+        metrics.ALERTS_WRITTEN.inc()
+        metrics.LAST_ALERT.set_to_current_time()
 
     def _append(self, alert: str, moment: datetime) -> None:
         day_dir = self._directory / moment.strftime("%Y-%m-%d")
@@ -89,6 +93,7 @@ class AlertStore:
             os.replace(tmp, target)
         except Exception:
             tmp.unlink(missing_ok=True)
+            metrics.ZIP_FAILURES.inc()
             logger.exception("Zipping %s failed", day_dir)
             return
         for hour_file in hour_files:
@@ -129,6 +134,9 @@ class AlertStore:
             try:
                 async with self._lock:
                     await asyncio.to_thread(self.maintain)
+                metrics.MAINTENANCE_RUNS.labels("success").inc()
+                metrics.MAINTENANCE_LAST_SUCCESS.set_to_current_time()
             except Exception:
+                metrics.MAINTENANCE_RUNS.labels("failure").inc()
                 logger.exception("Archive maintenance failed")
             await asyncio.sleep(interval)
