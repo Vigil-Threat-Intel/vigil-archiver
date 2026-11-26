@@ -5,6 +5,8 @@ services:
     environment:
       VIGIL_STREAM_URL: ${VIGIL_STREAM_URL:-http://host.docker.internal:8000/stream}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
+    ports:
+      - "127.0.0.1:9108:9108"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
